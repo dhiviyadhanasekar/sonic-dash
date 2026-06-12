@@ -1,12 +1,13 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useCallback } from "react";
 
 const W = 1280;
 const H = 720;
 const GRAVITY = 0.6;
-const JUMP_FORCE = -14;
+const JUMP_FORCE = -15;
 const SPEED = 5;
-const RING_COUNT = 20;
 const WIN_RINGS = 15;
+const PW = 48;
+const PH = 56;
 
 interface Vec { x: number; y: number; }
 interface Platform { x: number; y: number; w: number; h: number; color: string; }
@@ -26,10 +27,7 @@ interface Player {
   invincible: number;
   spinning: boolean;
   spinTimer: number;
-  color: string;
-  altColor: string;
-  eyeColor: string;
-  shoeColor: string;
+  isSonic: boolean;
   name: string;
 }
 
@@ -52,8 +50,7 @@ function makePlatforms(): Platform[] {
   ];
 }
 
-function makeRings(platforms: Platform[]): Ring[] {
-  const rings: Ring[] = [];
+function makeRings(): Ring[] {
   const positions: Vec[] = [
     { x: 240, y: H - 180 }, { x: 270, y: H - 180 }, { x: 300, y: H - 180 },
     { x: 550, y: H - 250 }, { x: 580, y: H - 250 }, { x: 610, y: H - 250 },
@@ -64,10 +61,7 @@ function makeRings(platforms: Platform[]): Ring[] {
     { x: 590, y: H - 510 }, { x: 620, y: H - 510 }, { x: 650, y: H - 510 },
     { x: 600, y: H - 670 },
   ];
-  for (let i = 0; i < Math.min(RING_COUNT, positions.length); i++) {
-    rings.push({ x: positions[i].x, y: positions[i].y, collected: false, animFrame: i * 3 });
-  }
-  return rings;
+  return positions.map((p, i) => ({ x: p.x, y: p.y, collected: false, animFrame: i * 3 }));
 }
 
 function makeSpikes(): Spike[] {
@@ -85,20 +79,19 @@ function makeSprings(): Spring[] {
   ];
 }
 
-function makePlayer(x: number, color: string, altColor: string, eyeColor: string, shoeColor: string, name: string): Player {
+function makePlayer(x: number, isSonic: boolean): Player {
   return {
-    x, y: H - 150,
+    x, y: H - 200,
     vx: 0, vy: 0,
     onGround: false,
     rings: 0,
-    facing: 1,
-    animFrame: 0,
-    animTimer: 0,
+    facing: isSonic ? 1 : -1,
+    animFrame: 0, animTimer: 0,
     running: false,
     invincible: 0,
-    spinning: false,
-    spinTimer: 0,
-    color, altColor, eyeColor, shoeColor, name,
+    spinning: false, spinTimer: 0,
+    isSonic,
+    name: isSonic ? "SONIC" : "TAILS",
   };
 }
 
@@ -107,11 +100,10 @@ function rectOverlap(ax: number, ay: number, aw: number, ah: number,
   return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
 }
 
-function drawPlayer(ctx: CanvasRenderingContext2D, p: Player, t: number) {
-  const cx = p.x + 20;
-  const cy = p.y + 24;
-  const blink = p.invincible > 0 && Math.floor(p.invincible / 4) % 2 === 0;
-  if (blink) return;
+// ─── Sonic drawing ───────────────────────────────────────────────────────────
+function drawSonic(ctx: CanvasRenderingContext2D, p: Player, t: number) {
+  const cx = p.x + PW / 2;
+  const cy = p.y + PH / 2;
 
   ctx.save();
   if (p.facing < 0) {
@@ -121,115 +113,489 @@ function drawPlayer(ctx: CanvasRenderingContext2D, p: Player, t: number) {
   }
 
   if (p.spinning) {
-    const spin = (t * 0.4) % (Math.PI * 2);
+    // Spin dash ball
+    const angle = (t * 0.5) % (Math.PI * 2);
     ctx.save();
-    ctx.translate(cx, cy);
-    ctx.rotate(spin);
+    ctx.translate(cx, cy + 6);
+    ctx.rotate(angle);
+    // Blue ball
     ctx.beginPath();
-    ctx.arc(0, 0, 18, 0, Math.PI * 2);
-    ctx.fillStyle = p.color;
+    ctx.arc(0, 0, 22, 0, Math.PI * 2);
+    ctx.fillStyle = "#0050C8";
     ctx.fill();
+    // Spin lines
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(a) * 8, Math.sin(a) * 8);
+      ctx.lineTo(Math.cos(a) * 20, Math.sin(a) * 20);
+      ctx.strokeStyle = "#003090";
+      ctx.lineWidth = 3;
+      ctx.stroke();
+    }
+    // Shine
     ctx.beginPath();
-    ctx.arc(0, 0, 14, 0, Math.PI * 2);
-    ctx.fillStyle = p.altColor;
+    ctx.arc(-8, -8, 6, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(255,255,255,0.35)";
     ctx.fill();
     ctx.restore();
-  } else {
-    const bob = p.running ? Math.sin(t * 0.3) * 2 : 0;
-    const legSwing = p.running ? Math.sin(t * 0.3) * 12 : 0;
-
-    ctx.beginPath();
-    ctx.ellipse(cx, cy + bob, 20, 18, 0, 0, Math.PI * 2);
-    ctx.fillStyle = p.color;
-    ctx.fill();
-
-    ctx.beginPath();
-    ctx.arc(cx + 6, cy - 10 + bob, 14, 0, Math.PI * 2);
-    ctx.fillStyle = p.color;
-    ctx.fill();
-
-    ctx.beginPath();
-    ctx.ellipse(cx + 2, cy + 6 + bob, 12, 10, 0, 0, Math.PI * 2);
-    ctx.fillStyle = p.altColor;
-    ctx.fill();
-
-    ctx.beginPath();
-    ctx.arc(cx + 14, cy - 8 + bob, 8, 0, Math.PI * 2);
-    ctx.fillStyle = "white";
-    ctx.fill();
-
-    ctx.beginPath();
-    ctx.arc(cx + 16, cy - 9 + bob, 4, 0, Math.PI * 2);
-    ctx.fillStyle = p.eyeColor;
-    ctx.fill();
-
-    ctx.beginPath();
-    ctx.arc(cx + 17, cy - 9 + bob, 2, 0, Math.PI * 2);
-    ctx.fillStyle = "black";
-    ctx.fill();
-
-    ctx.beginPath();
-    ctx.arc(cx + 17.5, cy - 10 + bob, 0.8, 0, Math.PI * 2);
-    ctx.fillStyle = "white";
-    ctx.fill();
-
-    const spines = [[-4, -22], [-10, -20], [-16, -17]];
-    spines.forEach(([sx, sy]) => {
-      ctx.beginPath();
-      ctx.moveTo(cx + sx + 6, cy + sy + 10 + bob);
-      ctx.lineTo(cx + sx - 8, cy + sy + 4 + bob);
-      ctx.lineTo(cx + sx + 2, cy + sy + 14 + bob);
-      ctx.closePath();
-      ctx.fillStyle = p.color;
-      ctx.fill();
-    });
-
-    const lx1 = cx - 8 + Math.sin((legSwing * Math.PI) / 180) * 8;
-    const lx2 = cx + 6 - Math.sin((legSwing * Math.PI) / 180) * 8;
-    const ly = cy + 18 + bob;
-
-    ctx.beginPath();
-    ctx.roundRect(lx1 - 10, ly, 22, 10, 5);
-    ctx.fillStyle = p.shoeColor;
-    ctx.fill();
-    ctx.strokeStyle = "white";
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-
-    ctx.beginPath();
-    ctx.roundRect(lx2 - 2, ly, 22, 10, 5);
-    ctx.fillStyle = p.shoeColor;
-    ctx.fill();
-    ctx.strokeStyle = "white";
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
+    ctx.restore();
+    return;
   }
 
+  const bob = p.running ? Math.sin(t * 0.35) * 2 : 0;
+  const legSwing = p.running ? Math.sin(t * 0.35) * 15 : 0;
+  const fy = cy + bob;
+
+  // ── Quills (drawn behind everything) ──
+  // Back quill (longest, points most backward)
+  ctx.beginPath();
+  ctx.moveTo(cx - 2, fy - 18);
+  ctx.lineTo(cx - 28, fy - 8);
+  ctx.lineTo(cx - 16, fy - 2);
+  ctx.closePath();
+  ctx.fillStyle = "#0050C8";
+  ctx.fill();
+  ctx.strokeStyle = "#003090";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // Middle quill
+  ctx.beginPath();
+  ctx.moveTo(cx + 2, fy - 22);
+  ctx.lineTo(cx - 20, fy - 14);
+  ctx.lineTo(cx - 10, fy - 6);
+  ctx.closePath();
+  ctx.fillStyle = "#0050C8";
+  ctx.fill();
+  ctx.strokeStyle = "#003090";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // Top quill (short, upward)
+  ctx.beginPath();
+  ctx.moveTo(cx + 6, fy - 24);
+  ctx.lineTo(cx - 8, fy - 20);
+  ctx.lineTo(cx - 2, fy - 12);
+  ctx.closePath();
+  ctx.fillStyle = "#0050C8";
+  ctx.fill();
+  ctx.strokeStyle = "#003090";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // ── Body ──
+  ctx.beginPath();
+  ctx.ellipse(cx, fy + 6, 16, 18, 0, 0, Math.PI * 2);
+  ctx.fillStyle = "#0050C8";
+  ctx.fill();
+
+  // ── Cream belly ──
+  ctx.beginPath();
+  ctx.ellipse(cx + 4, fy + 10, 10, 13, -0.2, 0, Math.PI * 2);
+  ctx.fillStyle = "#FFDD99";
+  ctx.fill();
+
+  // ── Head (big, round) ──
+  ctx.beginPath();
+  ctx.arc(cx + 4, fy - 12, 20, 0, Math.PI * 2);
+  ctx.fillStyle = "#0050C8";
+  ctx.fill();
+
+  // ── Face cream patch ──
+  ctx.beginPath();
+  ctx.ellipse(cx + 12, fy - 8, 11, 9, 0.2, 0, Math.PI * 2);
+  ctx.fillStyle = "#FFDD99";
+  ctx.fill();
+
+  // ── Nose ──
+  ctx.beginPath();
+  ctx.ellipse(cx + 22, fy - 10, 3, 2.5, 0, 0, Math.PI * 2);
+  ctx.fillStyle = "#111";
+  ctx.fill();
+
+  // ── Eye ──
+  // White sclera
+  ctx.beginPath();
+  ctx.ellipse(cx + 14, fy - 17, 9, 8, 0.1, 0, Math.PI * 2);
+  ctx.fillStyle = "white";
+  ctx.fill();
+
+  // Green iris
+  ctx.beginPath();
+  ctx.ellipse(cx + 16, fy - 17, 6, 7, 0, 0, Math.PI * 2);
+  ctx.fillStyle = "#00AA00";
+  ctx.fill();
+
+  // Black pupil
+  ctx.beginPath();
+  ctx.ellipse(cx + 17, fy - 17, 3.5, 4.5, 0, 0, Math.PI * 2);
+  ctx.fillStyle = "#000";
+  ctx.fill();
+
+  // Eye shine
+  ctx.beginPath();
+  ctx.arc(cx + 15, fy - 19, 1.5, 0, Math.PI * 2);
+  ctx.fillStyle = "white";
+  ctx.fill();
+
+  // Eyebrow (angled for determined look)
+  ctx.beginPath();
+  ctx.moveTo(cx + 8, fy - 26);
+  ctx.lineTo(cx + 22, fy - 22);
+  ctx.strokeStyle = "#0050C8";
+  ctx.lineWidth = 3;
+  ctx.lineCap = "round";
+  ctx.stroke();
+
+  // ── Ear ──
+  ctx.beginPath();
+  ctx.moveTo(cx + 4, fy - 28);
+  ctx.lineTo(cx - 2, fy - 38);
+  ctx.lineTo(cx + 12, fy - 32);
+  ctx.closePath();
+  ctx.fillStyle = "#0050C8";
+  ctx.fill();
+
+  // ── White gloves / arms ──
+  // Arm
+  ctx.beginPath();
+  ctx.ellipse(cx - 12, fy + 2, 5, 8, 0.4, 0, Math.PI * 2);
+  ctx.fillStyle = "#0050C8";
+  ctx.fill();
+
+  // Glove
+  ctx.beginPath();
+  ctx.arc(cx - 16, fy + 8, 7, 0, Math.PI * 2);
+  ctx.fillStyle = "white";
+  ctx.fill();
+  ctx.strokeStyle = "#ddd";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // ── Legs ──
+  const leg1x = cx - 6 + Math.sin((legSwing * Math.PI) / 180) * 6;
+  const leg2x = cx + 6 - Math.sin((legSwing * Math.PI) / 180) * 6;
+  const legY = fy + 22;
+
+  // Leg 1
+  ctx.beginPath();
+  ctx.moveTo(leg1x, legY - 10);
+  ctx.lineTo(leg1x - 2, legY);
+  ctx.strokeStyle = "#0050C8";
+  ctx.lineWidth = 7;
+  ctx.lineCap = "round";
+  ctx.stroke();
+
+  // Leg 2
+  ctx.beginPath();
+  ctx.moveTo(leg2x, legY - 10);
+  ctx.lineTo(leg2x + 2, legY);
+  ctx.strokeStyle = "#0050C8";
+  ctx.lineWidth = 7;
+  ctx.lineCap = "round";
+  ctx.stroke();
+
+  // ── Red shoes with white strap ──
+  const drawShoe = (sx: number, sy: number) => {
+    ctx.beginPath();
+    ctx.ellipse(sx + 2, sy + 5, 13, 7, 0, 0, Math.PI * 2);
+    ctx.fillStyle = "#CC0000";
+    ctx.fill();
+    ctx.strokeStyle = "white";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // White strap across shoe
+    ctx.beginPath();
+    ctx.moveTo(sx - 8, sy + 4);
+    ctx.lineTo(sx + 12, sy + 4);
+    ctx.strokeStyle = "white";
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    // Gold buckle
+    ctx.beginPath();
+    ctx.rect(sx + 1, sy + 2, 5, 4);
+    ctx.fillStyle = "#FFD700";
+    ctx.fill();
+  };
+
+  drawShoe(leg1x - 11, legY - 2);
+  drawShoe(leg2x - 9, legY - 2);
+
   ctx.restore();
+}
+
+// ─── Tails drawing ────────────────────────────────────────────────────────────
+function drawTails(ctx: CanvasRenderingContext2D, p: Player, t: number) {
+  const cx = p.x + PW / 2;
+  const cy = p.y + PH / 2;
+
+  ctx.save();
+  if (p.facing < 0) {
+    ctx.translate(cx, cy);
+    ctx.scale(-1, 1);
+    ctx.translate(-cx, -cy);
+  }
+
+  if (p.spinning) {
+    const angle = (t * 0.5) % (Math.PI * 2);
+    ctx.save();
+    ctx.translate(cx, cy + 6);
+    ctx.rotate(angle);
+    ctx.beginPath();
+    ctx.arc(0, 0, 22, 0, Math.PI * 2);
+    ctx.fillStyle = "#E87C00";
+    ctx.fill();
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(a) * 8, Math.sin(a) * 8);
+      ctx.lineTo(Math.cos(a) * 20, Math.sin(a) * 20);
+      ctx.strokeStyle = "#B85C00";
+      ctx.lineWidth = 3;
+      ctx.stroke();
+    }
+    ctx.beginPath();
+    ctx.arc(-8, -8, 6, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(255,255,255,0.35)";
+    ctx.fill();
+    ctx.restore();
+    ctx.restore();
+    return;
+  }
+
+  const bob = p.running ? Math.sin(t * 0.35) * 2 : 0;
+  const legSwing = p.running ? Math.sin(t * 0.35) * 15 : 0;
+  const tailWag = Math.sin(t * 0.15) * 18;
+  const fy = cy + bob;
+
+  // ── Two fox tails ──
+  // Tail 1
+  ctx.beginPath();
+  ctx.moveTo(cx - 4, fy + 8);
+  ctx.bezierCurveTo(
+    cx - 22, fy + 2 + tailWag * 0.5,
+    cx - 36, fy - 10 + tailWag,
+    cx - 30, fy - 22 + tailWag
+  );
+  ctx.bezierCurveTo(
+    cx - 24, fy - 30 + tailWag,
+    cx - 14, fy - 24 + tailWag * 0.8,
+    cx - 10, fy + 4
+  );
+  ctx.closePath();
+  ctx.fillStyle = "#E87C00";
+  ctx.fill();
+  ctx.strokeStyle = "#B85C00";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // White tail tip 1
+  ctx.beginPath();
+  ctx.ellipse(cx - 30, fy - 22 + tailWag, 10, 7, -0.5 + tailWag * 0.02, 0, Math.PI * 2);
+  ctx.fillStyle = "white";
+  ctx.fill();
+
+  // Tail 2 (offset slightly)
+  const tailWag2 = Math.sin(t * 0.15 + 0.5) * 15;
+  ctx.beginPath();
+  ctx.moveTo(cx - 2, fy + 10);
+  ctx.bezierCurveTo(
+    cx - 18, fy + 6 + tailWag2 * 0.5,
+    cx - 28, fy - 6 + tailWag2,
+    cx - 24, fy - 18 + tailWag2
+  );
+  ctx.bezierCurveTo(
+    cx - 18, fy - 26 + tailWag2,
+    cx - 8, fy - 20 + tailWag2 * 0.8,
+    cx - 6, fy + 6
+  );
+  ctx.closePath();
+  ctx.fillStyle = "#F59C20";
+  ctx.fill();
+  ctx.strokeStyle = "#B85C00";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // White tail tip 2
+  ctx.beginPath();
+  ctx.ellipse(cx - 24, fy - 18 + tailWag2, 9, 6, -0.4 + tailWag2 * 0.02, 0, Math.PI * 2);
+  ctx.fillStyle = "white";
+  ctx.fill();
+
+  // ── Body ──
+  ctx.beginPath();
+  ctx.ellipse(cx, fy + 6, 15, 17, 0, 0, Math.PI * 2);
+  ctx.fillStyle = "#E87C00";
+  ctx.fill();
+
+  // ── Cream belly ──
+  ctx.beginPath();
+  ctx.ellipse(cx + 3, fy + 10, 9, 12, -0.1, 0, Math.PI * 2);
+  ctx.fillStyle = "#FFF0CC";
+  ctx.fill();
+
+  // ── Head ──
+  ctx.beginPath();
+  ctx.arc(cx + 3, fy - 13, 20, 0, Math.PI * 2);
+  ctx.fillStyle = "#E87C00";
+  ctx.fill();
+
+  // ── Face cream patch ──
+  ctx.beginPath();
+  ctx.ellipse(cx + 10, fy - 8, 11, 9, 0.2, 0, Math.PI * 2);
+  ctx.fillStyle = "#FFF0CC";
+  ctx.fill();
+
+  // ── Nose ──
+  ctx.beginPath();
+  ctx.ellipse(cx + 20, fy - 10, 3, 2.5, 0, 0, Math.PI * 2);
+  ctx.fillStyle = "#111";
+  ctx.fill();
+
+  // ── Eyes (Tails has teal/blue eyes) ──
+  ctx.beginPath();
+  ctx.ellipse(cx + 13, fy - 17, 9, 8, 0.1, 0, Math.PI * 2);
+  ctx.fillStyle = "white";
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.ellipse(cx + 15, fy - 17, 6, 7, 0, 0, Math.PI * 2);
+  ctx.fillStyle = "#0099CC";
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.ellipse(cx + 16, fy - 17, 3.5, 4.5, 0, 0, Math.PI * 2);
+  ctx.fillStyle = "#000";
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.arc(cx + 14, fy - 19, 1.5, 0, Math.PI * 2);
+  ctx.fillStyle = "white";
+  ctx.fill();
+
+  // Eyebrow (friendlier angle)
+  ctx.beginPath();
+  ctx.moveTo(cx + 6, fy - 25);
+  ctx.lineTo(cx + 20, fy - 23);
+  ctx.strokeStyle = "#B85C00";
+  ctx.lineWidth = 2.5;
+  ctx.lineCap = "round";
+  ctx.stroke();
+
+  // ── Ears (round fox ears) ──
+  ctx.beginPath();
+  ctx.moveTo(cx - 2, fy - 28);
+  ctx.lineTo(cx - 8, fy - 42);
+  ctx.lineTo(cx + 6, fy - 34);
+  ctx.closePath();
+  ctx.fillStyle = "#E87C00";
+  ctx.fill();
+
+  // Inner ear
+  ctx.beginPath();
+  ctx.moveTo(cx - 1, fy - 29);
+  ctx.lineTo(cx - 5, fy - 39);
+  ctx.lineTo(cx + 4, fy - 33);
+  ctx.closePath();
+  ctx.fillStyle = "#FFB0B0";
+  ctx.fill();
+
+  // Right ear
+  ctx.beginPath();
+  ctx.moveTo(cx + 14, fy - 28);
+  ctx.lineTo(cx + 18, fy - 40);
+  ctx.lineTo(cx + 24, fy - 30);
+  ctx.closePath();
+  ctx.fillStyle = "#E87C00";
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(cx + 15, fy - 29);
+  ctx.lineTo(cx + 18, fy - 38);
+  ctx.lineTo(cx + 22, fy - 31);
+  ctx.closePath();
+  ctx.fillStyle = "#FFB0B0";
+  ctx.fill();
+
+  // ── White gloves ──
+  ctx.beginPath();
+  ctx.ellipse(cx - 12, fy + 2, 5, 7, 0.4, 0, Math.PI * 2);
+  ctx.fillStyle = "#E87C00";
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(cx - 15, fy + 8, 7, 0, Math.PI * 2);
+  ctx.fillStyle = "white";
+  ctx.fill();
+  ctx.strokeStyle = "#ddd";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // ── Legs ──
+  const leg1x = cx - 6 + Math.sin((legSwing * Math.PI) / 180) * 6;
+  const leg2x = cx + 6 - Math.sin((legSwing * Math.PI) / 180) * 6;
+  const legY = fy + 22;
+
+  ctx.beginPath();
+  ctx.moveTo(leg1x, legY - 10);
+  ctx.lineTo(leg1x - 2, legY);
+  ctx.strokeStyle = "#E87C00";
+  ctx.lineWidth = 7;
+  ctx.lineCap = "round";
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(leg2x, legY - 10);
+  ctx.lineTo(leg2x + 2, legY);
+  ctx.strokeStyle = "#E87C00";
+  ctx.lineWidth = 7;
+  ctx.lineCap = "round";
+  ctx.stroke();
+
+  // ── White shoes (Tails has white shoes) ──
+  const drawShoe = (sx: number, sy: number) => {
+    ctx.beginPath();
+    ctx.ellipse(sx + 2, sy + 5, 13, 7, 0, 0, Math.PI * 2);
+    ctx.fillStyle = "white";
+    ctx.fill();
+    ctx.strokeStyle = "#ccc";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(sx - 8, sy + 4);
+    ctx.lineTo(sx + 12, sy + 4);
+    ctx.strokeStyle = "#E87C00";
+    ctx.lineWidth = 3;
+    ctx.stroke();
+  };
+
+  drawShoe(leg1x - 11, legY - 2);
+  drawShoe(leg2x - 9, legY - 2);
+
+  ctx.restore();
+}
+
+function drawPlayer(ctx: CanvasRenderingContext2D, p: Player, t: number) {
+  const blink = p.invincible > 0 && Math.floor(p.invincible / 4) % 2 === 0;
+  if (blink) return;
+  if (p.isSonic) drawSonic(ctx, p, t);
+  else drawTails(ctx, p, t);
 }
 
 function drawRing(ctx: CanvasRenderingContext2D, r: Ring, t: number) {
   if (r.collected) return;
   const wobble = Math.cos((t + r.animFrame) * 0.08) * 6;
-  const rx = r.x + wobble;
+  const scaleX = Math.abs(Math.cos((t + r.animFrame) * 0.06));
 
   ctx.save();
-  ctx.translate(rx, r.y);
+  ctx.translate(r.x + wobble, r.y);
+  ctx.scale(scaleX, 1);
 
   const grad = ctx.createRadialGradient(-3, -3, 1, 0, 0, 12);
-  grad.addColorStop(0, "#FFE066");
-  grad.addColorStop(0.4, "#FFD700");
+  grad.addColorStop(0, "#FFE566");
+  grad.addColorStop(0.5, "#FFD700");
   grad.addColorStop(1, "#B8860B");
-
-  ctx.beginPath();
-  ctx.arc(0, 0, 12, 0, Math.PI * 2);
-  ctx.fillStyle = grad;
-  ctx.fill();
-
-  ctx.beginPath();
-  ctx.arc(0, 0, 8, 0, Math.PI * 2);
-  ctx.fillStyle = "transparent";
-  ctx.clearRect(-8, -8, 16, 16);
 
   ctx.beginPath();
   ctx.arc(0, 0, 12, 0, Math.PI * 2);
@@ -239,7 +605,7 @@ function drawRing(ctx: CanvasRenderingContext2D, r: Ring, t: number) {
 
   ctx.beginPath();
   ctx.arc(-3, -4, 3, 0, Math.PI * 2);
-  ctx.fillStyle = "rgba(255,255,255,0.6)";
+  ctx.fillStyle = "rgba(255,255,255,0.55)";
   ctx.fill();
 
   ctx.restore();
@@ -265,48 +631,46 @@ function drawSpring(ctx: CanvasRenderingContext2D, s: Spring) {
   const compressed = s.active;
   ctx.save();
   ctx.translate(s.x, s.y);
-  ctx.fillStyle = "#e74c3c";
+  ctx.fillStyle = compressed ? "#ff4444" : "#e74c3c";
   ctx.fillRect(0, compressed ? 8 : 2, 30, compressed ? 6 : 12);
-  const stripes = 4;
-  for (let i = 0; i < stripes; i++) {
-    ctx.fillStyle = i % 2 === 0 ? "#c0392b" : "#ff6b6b";
-    ctx.fillRect(0, (compressed ? 8 : 2) + i * (compressed ? 1.5 : 3), 30, compressed ? 1.5 : 3);
-  }
   ctx.fillStyle = "#f39c12";
-  ctx.fillRect(-2, compressed ? 12 : 12, 34, 4);
+  ctx.fillRect(-2, 12, 34, 4);
+  if (!compressed) {
+    ctx.fillStyle = "#ff8888";
+    ctx.fillRect(4, 4, 22, 3);
+  }
   ctx.restore();
 }
 
 function drawBackground(ctx: CanvasRenderingContext2D, t: number) {
   const grad = ctx.createLinearGradient(0, 0, 0, H);
-  grad.addColorStop(0, "#1a0a4e");
-  grad.addColorStop(0.5, "#0d4f8e");
-  grad.addColorStop(1, "#0a2e5e");
+  grad.addColorStop(0, "#0d1b5e");
+  grad.addColorStop(0.5, "#1a4080");
+  grad.addColorStop(1, "#0a2040");
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, W, H);
 
-  for (let i = 0; i < 60; i++) {
-    const sx = ((i * 127 + t * (i % 3 === 0 ? 0.1 : 0.05)) % W + W) % W;
-    const sy = (i * 89) % (H * 0.7);
+  for (let i = 0; i < 70; i++) {
+    const sx = ((i * 137 + t * (i % 4 < 2 ? 0.08 : 0.04)) % W + W) % W;
+    const sy = (i * 97) % (H * 0.75);
     const size = (i % 3) + 1;
-    const alpha = 0.4 + (Math.sin(t * 0.05 + i) + 1) * 0.3;
+    const alpha = 0.35 + (Math.sin(t * 0.04 + i) + 1) * 0.25;
     ctx.beginPath();
     ctx.arc(sx, sy, size, 0, Math.PI * 2);
     ctx.fillStyle = `rgba(255,255,255,${alpha})`;
     ctx.fill();
   }
 
-  for (let i = 0; i < 5; i++) {
-    const mx = ((i * 250 + 50 + t * 0.2) % (W + 200)) - 100;
-    const my = 80 + i * 50;
+  // Clouds
+  for (let i = 0; i < 4; i++) {
+    const cx2 = ((i * 300 + 80 + t * 0.15) % (W + 200)) - 100;
+    const cy2 = 60 + i * 55;
     ctx.save();
-    ctx.translate(mx, my);
-    const grad2 = ctx.createRadialGradient(0, 0, 10, 0, 0, 60);
-    grad2.addColorStop(0, "rgba(255,255,255,0.15)");
-    grad2.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = "rgba(255,255,255,0.06)";
     ctx.beginPath();
-    ctx.arc(0, 0, 60, 0, Math.PI * 2);
-    ctx.fillStyle = grad2;
+    ctx.arc(cx2, cy2, 50, 0, Math.PI * 2);
+    ctx.arc(cx2 + 40, cy2 - 10, 35, 0, Math.PI * 2);
+    ctx.arc(cx2 + 70, cy2, 40, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
   }
@@ -315,12 +679,14 @@ function drawBackground(ctx: CanvasRenderingContext2D, t: number) {
 function drawPlatform(ctx: CanvasRenderingContext2D, p: Platform) {
   ctx.fillStyle = p.color;
   ctx.beginPath();
-  ctx.roundRect(p.x, p.y, p.w, p.h, 6);
+  if (ctx.roundRect) ctx.roundRect(p.x, p.y, p.w, p.h, 6);
+  else ctx.rect(p.x, p.y, p.w, p.h);
   ctx.fill();
 
   ctx.fillStyle = "rgba(255,255,255,0.3)";
   ctx.beginPath();
-  ctx.roundRect(p.x + 4, p.y + 2, p.w - 8, 5, 3);
+  if (ctx.roundRect) ctx.roundRect(p.x + 4, p.y + 2, p.w - 8, 5, 3);
+  else ctx.rect(p.x + 4, p.y + 2, p.w - 8, 5);
   ctx.fill();
 
   ctx.fillStyle = "rgba(0,0,0,0.2)";
@@ -328,70 +694,68 @@ function drawPlatform(ctx: CanvasRenderingContext2D, p: Platform) {
 }
 
 function drawHUD(ctx: CanvasRenderingContext2D, p1: Player, p2: Player, gameState: string, winner: string) {
-  if (gameState === "title") return;
-
-  const drawPlayerHUD = (p: Player, x: number, side: "left" | "right") => {
+  const drawPanel = (p: Player, x: number, align: "left" | "right") => {
     ctx.save();
-    ctx.fillStyle = "rgba(0,0,0,0.55)";
+    ctx.fillStyle = "rgba(0,0,0,0.6)";
     ctx.beginPath();
-    ctx.roundRect(x, 10, 200, 70, 12);
+    if (ctx.roundRect) ctx.roundRect(x, 8, 210, 76, 12);
+    else ctx.rect(x, 8, 210, 76);
     ctx.fill();
 
-    ctx.fillStyle = p.color;
-    ctx.font = "bold 14px Arial";
-    ctx.textAlign = side === "left" ? "left" : "right";
-    ctx.fillText(p.name, side === "left" ? x + 14 : x + 186, 32);
+    const nameColor = p.isSonic ? "#4488FF" : "#FF9900";
+    ctx.fillStyle = nameColor;
+    ctx.font = "bold 15px Arial";
+    ctx.textAlign = align;
+    ctx.fillText(p.name, align === "left" ? x + 14 : x + 196, 30);
 
     ctx.fillStyle = "#FFD700";
-    ctx.font = "bold 22px Arial";
-    ctx.textAlign = side === "left" ? "left" : "right";
-    ctx.fillText(`${p.rings} rings`, side === "left" ? x + 14 : x + 186, 60);
+    ctx.font = "bold 24px Arial";
+    ctx.fillText(`${p.rings} / ${WIN_RINGS}`, align === "left" ? x + 14 : x + 196, 60);
 
-    const barW = 160;
-    const barX = x + 20;
-    const barY = 68;
+    const barX = x + 12;
+    const barW = 186;
     ctx.fillStyle = "rgba(255,255,255,0.15)";
-    ctx.fillRect(barX, barY, barW, 8);
+    ctx.fillRect(barX, 66, barW, 10);
     ctx.fillStyle = "#FFD700";
-    ctx.fillRect(barX, barY, (p.rings / WIN_RINGS) * barW, 8);
-
+    ctx.fillRect(barX, 66, Math.min(1, p.rings / WIN_RINGS) * barW, 10);
+    ctx.strokeStyle = "rgba(255,255,255,0.3)";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(barX, 66, barW, 10);
     ctx.restore();
   };
 
-  drawPlayerHUD(p1, 10, "left");
-  drawPlayerHUD(p2, W - 210, "right");
+  drawPanel(p1, 10, "left");
+  drawPanel(p2, W - 220, "right");
 
   ctx.fillStyle = "rgba(0,0,0,0.5)";
   ctx.beginPath();
-  ctx.roundRect(W / 2 - 80, 10, 160, 40, 10);
+  if (ctx.roundRect) ctx.roundRect(W / 2 - 90, 8, 180, 40, 10);
+  else ctx.rect(W / 2 - 90, 8, 180, 40);
   ctx.fill();
   ctx.fillStyle = "white";
   ctx.font = "bold 14px Arial";
   ctx.textAlign = "center";
-  ctx.fillText(`First to ${WIN_RINGS} rings wins!`, W / 2, 35);
+  ctx.fillText(`★ First to ${WIN_RINGS} rings wins! ★`, W / 2, 33);
 
   if (gameState === "over") {
-    ctx.fillStyle = "rgba(0,0,0,0.65)";
+    ctx.fillStyle = "rgba(0,0,0,0.7)";
     ctx.fillRect(0, 0, W, H);
 
     ctx.save();
     ctx.textAlign = "center";
-
-    const grad = ctx.createLinearGradient(W/2 - 200, H/2 - 80, W/2 + 200, H/2 + 80);
-    grad.addColorStop(0, "#FFD700");
-    grad.addColorStop(0.5, "#FFF");
-    grad.addColorStop(1, "#FFD700");
-
-    ctx.font = "bold 72px Arial";
-    ctx.fillStyle = grad;
+    const g = ctx.createLinearGradient(W/2 - 200, H/2 - 60, W/2 + 200, H/2 + 60);
+    g.addColorStop(0, "#FFD700");
+    g.addColorStop(0.5, "#FFFFFF");
+    g.addColorStop(1, "#FFD700");
+    ctx.font = "bold 68px Arial";
+    ctx.fillStyle = g;
     ctx.shadowColor = "#FFD700";
-    ctx.shadowBlur = 30;
-    ctx.fillText("🏆 " + winner + " WINS! 🏆", W / 2, H / 2 - 20);
-
+    ctx.shadowBlur = 40;
+    ctx.fillText("🏆 " + winner + " WINS! 🏆", W / 2, H / 2 - 10);
     ctx.shadowBlur = 0;
-    ctx.font = "bold 28px Arial";
+    ctx.font = "bold 26px Arial";
     ctx.fillStyle = "white";
-    ctx.fillText("Press ENTER or SPACE to play again", W / 2, H / 2 + 50);
+    ctx.fillText("Press ENTER or SPACE to play again", W / 2, H / 2 + 55);
     ctx.restore();
   }
 }
@@ -400,41 +764,43 @@ function drawTitle(ctx: CanvasRenderingContext2D, t: number) {
   ctx.save();
   ctx.textAlign = "center";
 
-  ctx.font = "bold 82px Arial";
-  const tGrad = ctx.createLinearGradient(W/2 - 250, H/2 - 120, W/2 + 250, H/2 - 40);
-  tGrad.addColorStop(0, "#00BFFF");
-  tGrad.addColorStop(0.5, "#FFD700");
-  tGrad.addColorStop(1, "#00BFFF");
-  ctx.fillStyle = tGrad;
-  ctx.shadowColor = "#00BFFF";
-  ctx.shadowBlur = 20 + Math.sin(t * 0.05) * 10;
+  const g = ctx.createLinearGradient(W/2 - 260, H/2 - 120, W/2 + 260, H/2 - 40);
+  g.addColorStop(0, "#4488FF");
+  g.addColorStop(0.5, "#FFD700");
+  g.addColorStop(1, "#4488FF");
+  ctx.font = "bold 88px Arial";
+  ctx.fillStyle = g;
+  ctx.shadowColor = "#0050FF";
+  ctx.shadowBlur = 20 + Math.sin(t * 0.05) * 8;
   ctx.fillText("SONIC DASH", W / 2, H / 2 - 60);
 
   ctx.shadowBlur = 0;
   ctx.font = "bold 30px Arial";
   ctx.fillStyle = "#FFD700";
-  ctx.fillText("2 PLAYER RING RUSH", W / 2, H / 2 - 15);
+  ctx.fillText("2 PLAYER RING RUSH", W / 2, H / 2 - 10);
+
+  ctx.font = "20px Arial";
+  ctx.fillStyle = "rgba(255,255,255,0.9)";
+  ctx.fillText("🦔  SONIC (P1):  A / D  to run   W  to jump", W / 2, H / 2 + 45);
+  ctx.fillText("🦊  TAILS  (P2):  ← / →  to run   ↑  to jump", W / 2, H / 2 + 80);
+
+  const pulse = Math.abs(Math.sin(t * 0.07));
+  ctx.font = `bold ${22 + pulse * 5}px Arial`;
+  ctx.fillStyle = `rgba(255,215,0,${0.7 + pulse * 0.3})`;
+  ctx.fillText("★ Press SPACE or ENTER to START! ★", W / 2, H / 2 + 140);
 
   ctx.font = "18px Arial";
-  ctx.fillStyle = "rgba(255,255,255,0.9)";
-  ctx.fillText("PLAYER 1:  A / D  to run   W  to jump", W / 2, H / 2 + 45);
-  ctx.fillText("PLAYER 2:  ← / →  to run   ↑  to jump", W / 2, H / 2 + 75);
-  ctx.fillText("Press SPACE or ENTER to start!", W / 2, H / 2 + 130);
-
-  const pulse = Math.abs(Math.sin(t * 0.07)) * 0.5 + 0.5;
-  ctx.font = `bold ${24 + pulse * 4}px Arial`;
-  ctx.fillStyle = `rgba(255,215,0,${0.7 + pulse * 0.3})`;
-  ctx.fillText("★ Collect " + WIN_RINGS + " rings to win! ★", W / 2, H / 2 + 170);
+  ctx.fillStyle = "rgba(255,255,255,0.7)";
+  ctx.fillText(`Collect ${WIN_RINGS} rings to win!`, W / 2, H / 2 + 178);
 
   ctx.restore();
 }
 
-function drawCollectEffect(ctx: CanvasRenderingContext2D, effects: {x:number;y:number;life:number}[]) {
+function drawCollectEffects(ctx: CanvasRenderingContext2D, effects: {x:number;y:number;life:number}[]) {
   effects.forEach(e => {
-    const alpha = e.life / 30;
     ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.font = `bold ${18 + (30 - e.life)}px Arial`;
+    ctx.globalAlpha = e.life / 30;
+    ctx.font = `bold ${16 + (30 - e.life) * 0.5}px Arial`;
     ctx.fillStyle = "#FFD700";
     ctx.textAlign = "center";
     ctx.fillText("+1", e.x, e.y);
@@ -444,12 +810,13 @@ function drawCollectEffect(ctx: CanvasRenderingContext2D, effects: {x:number;y:n
 
 export default function Game() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+
   const stateRef = useRef({
     t: 0,
     gameState: "title" as "title" | "playing" | "over",
     winner: "",
-    p1: makePlayer(150, "#2980b9", "#ecf0f1", "#27ae60", "#c0392b", "SONIC"),
-    p2: makePlayer(W - 190, "#f39c12", "#fff3cd", "#8e44ad", "#1a1a1a", "TAILS"),
+    p1: makePlayer(120, true),
+    p2: makePlayer(W - 170, false),
     platforms: makePlatforms(),
     rings: [] as Ring[],
     spikes: makeSpikes(),
@@ -460,9 +827,9 @@ export default function Game() {
 
   const resetGame = useCallback(() => {
     const s = stateRef.current;
-    s.p1 = makePlayer(150, "#2980b9", "#ecf0f1", "#27ae60", "#c0392b", "SONIC");
-    s.p2 = makePlayer(W - 190, "#f39c12", "#fff3cd", "#8e44ad", "#1a1a1a", "TAILS");
-    s.rings = makeRings(s.platforms);
+    s.p1 = makePlayer(120, true);
+    s.p2 = makePlayer(W - 170, false);
+    s.rings = makeRings();
     s.spikes = makeSpikes();
     s.springs = makeSprings();
     s.effects = [];
@@ -472,24 +839,22 @@ export default function Game() {
 
   useEffect(() => {
     const s = stateRef.current;
-    s.rings = makeRings(s.platforms);
+    s.rings = makeRings();
 
-    const onKey = (e: KeyboardEvent, down: boolean) => {
-      s.keys[e.code] = down;
-      if (down && s.gameState !== "playing") {
-        if (["Space", "Enter"].includes(e.code)) {
-          if (s.gameState === "title") resetGame();
-          else if (s.gameState === "over") resetGame();
-        }
+    const onKeyDown = (e: KeyboardEvent) => {
+      s.keys[e.code] = true;
+      if (s.gameState !== "playing" && ["Space", "Enter"].includes(e.code)) {
+        resetGame();
       }
       e.preventDefault();
     };
+    const onKeyUp = (e: KeyboardEvent) => { s.keys[e.code] = false; };
 
-    window.addEventListener("keydown", e => onKey(e, true));
-    window.addEventListener("keyup", e => onKey(e, false));
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
     return () => {
-      window.removeEventListener("keydown", e => onKey(e, true));
-      window.removeEventListener("keyup", e => onKey(e, false));
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
     };
   }, [resetGame]);
 
@@ -499,152 +864,122 @@ export default function Game() {
     const ctx = canvas.getContext("2d")!;
     let raf: number;
 
-    const updatePlayer = (p: Player, leftKey: string, rightKey: string, jumpKey: string, altJumpKey?: string) => {
+    const updatePlayer = (p: Player, leftKey: string, rightKey: string, jumpKey: string) => {
       const s = stateRef.current;
       const left = s.keys[leftKey];
       const right = s.keys[rightKey];
-      const jump = s.keys[jumpKey] || (altJumpKey ? s.keys[altJumpKey] : false);
+      const jump = s.keys[jumpKey];
 
       if (left) { p.vx = -SPEED; p.facing = -1; p.running = true; }
       else if (right) { p.vx = SPEED; p.facing = 1; p.running = true; }
-      else { p.vx *= 0.8; p.running = Math.abs(p.vx) > 0.5; }
+      else { p.vx *= 0.75; p.running = Math.abs(p.vx) > 0.5; }
 
       if (jump && p.onGround) {
         p.vy = JUMP_FORCE;
         p.onGround = false;
         p.spinning = true;
-        p.spinTimer = 30;
+        p.spinTimer = 28;
       }
 
-      if (p.spinTimer > 0) {
-        p.spinTimer--;
-        if (p.spinTimer === 0) p.spinning = false;
-      }
+      if (p.spinTimer > 0) { p.spinTimer--; if (p.spinTimer === 0) p.spinning = false; }
 
       p.vy += GRAVITY;
       if (p.vy > 20) p.vy = 20;
-
       p.x += p.vx;
       p.y += p.vy;
 
       if (p.x < 0) p.x = 0;
-      if (p.x > W - 40) p.x = W - 40;
+      if (p.x > W - PW) p.x = W - PW;
 
       p.onGround = false;
       for (const plat of s.platforms) {
-        const px = p.x, py = p.y, pw = 40, ph = 48;
-        if (rectOverlap(px, py, pw, ph, plat.x, plat.y, plat.w, plat.h)) {
-          const fromTop = p.y + ph - plat.y;
+        if (rectOverlap(p.x, p.y, PW, PH, plat.x, plat.y, plat.w, plat.h)) {
+          const fromTop = p.y + PH - plat.y;
           const fromBottom = plat.y + plat.h - p.y;
-          const fromLeft = p.x + pw - plat.x;
+          const fromLeft = p.x + PW - plat.x;
           const fromRight = plat.x + plat.w - p.x;
-          const minOverlap = Math.min(fromTop, fromBottom, fromLeft, fromRight);
-          if (minOverlap === fromTop && p.vy >= 0) {
-            p.y = plat.y - ph;
-            p.vy = 0;
-            p.onGround = true;
-            p.spinning = false;
-          } else if (minOverlap === fromBottom && p.vy < 0) {
-            p.y = plat.y + plat.h;
-            p.vy = 0;
-          } else if (minOverlap === fromLeft) {
-            p.x = plat.x - pw;
-            p.vx = 0;
-          } else if (minOverlap === fromRight) {
-            p.x = plat.x + plat.w;
-            p.vx = 0;
+          const min = Math.min(fromTop, fromBottom, fromLeft, fromRight);
+          if (min === fromTop && p.vy >= 0) {
+            p.y = plat.y - PH; p.vy = 0; p.onGround = true; p.spinning = false;
+          } else if (min === fromBottom && p.vy < 0) {
+            p.y = plat.y + plat.h; p.vy = 0;
+          } else if (min === fromLeft) {
+            p.x = plat.x - PW; p.vx = 0;
+          } else {
+            p.x = plat.x + plat.w; p.vx = 0;
           }
         }
       }
 
       for (const spike of s.spikes) {
-        if (p.invincible === 0 && rectOverlap(p.x + 4, p.y + 4, 32, 44, spike.x, spike.y, spike.w, spike.h)) {
+        if (p.invincible === 0 && rectOverlap(p.x + 6, p.y + 6, PW - 12, PH - 12, spike.x, spike.y, spike.w, spike.h)) {
           p.rings = Math.max(0, p.rings - 3);
           p.invincible = 90;
-          p.vy = -8;
+          p.vy = -9;
         }
       }
 
       for (const spring of s.springs) {
-        if (rectOverlap(p.x + 4, p.y + 4, 32, 44, spring.x, spring.y + 6, 30, 10)) {
-          p.vy = -22;
-          p.onGround = false;
-          spring.active = true;
-          spring.timer = 20;
-          p.spinning = true;
-          p.spinTimer = 40;
+        if (rectOverlap(p.x + 4, p.y + 4, PW - 8, PH - 8, spring.x, spring.y + 8, 30, 8)) {
+          p.vy = -24; p.onGround = false;
+          spring.active = true; spring.timer = 20;
+          p.spinning = true; p.spinTimer = 45;
         }
       }
 
       for (const r of s.rings) {
-        if (!r.collected && rectOverlap(p.x + 8, p.y + 8, 24, 32, r.x - 12, r.y - 12, 24, 24)) {
+        if (!r.collected && rectOverlap(p.x + 8, p.y + 8, PW - 16, PH - 16, r.x - 12, r.y - 12, 24, 24)) {
           r.collected = true;
           p.rings++;
           s.effects.push({ x: r.x, y: r.y - 20, life: 30 });
         }
       }
 
-      if (p.y > H + 100) {
-        p.y = 100;
-        p.vy = 0;
-      }
-
+      if (p.y > H + 100) { p.y = 80; p.vy = 0; }
       if (p.invincible > 0) p.invincible--;
 
       p.animTimer++;
-      if (p.running && p.animTimer > 6) {
-        p.animFrame = (p.animFrame + 1) % 4;
-        p.animTimer = 0;
-      }
-    };
-
-    const update = () => {
-      const s = stateRef.current;
-      s.t++;
-
-      if (s.gameState !== "playing") return;
-
-      updatePlayer(s.p1, "KeyA", "KeyD", "KeyW");
-      updatePlayer(s.p2, "ArrowLeft", "ArrowRight", "ArrowUp");
-
-      for (const sp of s.springs) {
-        if (sp.timer > 0) {
-          sp.timer--;
-          if (sp.timer === 0) sp.active = false;
-        }
-      }
-
-      s.effects = s.effects.map(e => ({ ...e, y: e.y - 1, life: e.life - 1 })).filter(e => e.life > 0);
-
-      if (s.p1.rings >= WIN_RINGS) { s.gameState = "over"; s.winner = s.p1.name; }
-      if (s.p2.rings >= WIN_RINGS) { s.gameState = "over"; s.winner = s.p2.name; }
-    };
-
-    const render = () => {
-      const s = stateRef.current;
-      const { t, p1, p2, platforms, rings, spikes, springs, effects, gameState, winner } = s;
-
-      ctx.clearRect(0, 0, W, H);
-      drawBackground(ctx, t);
-
-      if (gameState === "title") {
-        drawTitle(ctx, t);
-        return;
-      }
-
-      for (const plat of platforms) drawPlatform(ctx, plat);
-      for (const spike of spikes) drawSpike(ctx, spike);
-      for (const spring of springs) drawSpring(ctx, spring);
-      for (const ring of rings) drawRing(ctx, ring, t);
-      drawCollectEffect(ctx, effects);
-      drawPlayer(ctx, p1, t);
-      drawPlayer(ctx, p2, t);
-      drawHUD(ctx, p1, p2, gameState, winner);
+      if (p.running && p.animTimer > 5) { p.animFrame = (p.animFrame + 1) % 4; p.animTimer = 0; }
     };
 
     const loop = () => {
-      update();
-      render();
+      const s = stateRef.current;
+      s.t++;
+
+      if (s.gameState === "playing") {
+        updatePlayer(s.p1, "KeyA", "KeyD", "KeyW");
+        updatePlayer(s.p2, "ArrowLeft", "ArrowRight", "ArrowUp");
+
+        for (const sp of s.springs) {
+          if (sp.timer > 0) { sp.timer--; if (sp.timer === 0) sp.active = false; }
+        }
+
+        s.effects = s.effects
+          .map(e => ({ ...e, y: e.y - 1.2, life: e.life - 1 }))
+          .filter(e => e.life > 0);
+
+        if (s.p1.rings >= WIN_RINGS) { s.gameState = "over"; s.winner = s.p1.name; }
+        if (s.p2.rings >= WIN_RINGS) { s.gameState = "over"; s.winner = s.p2.name; }
+      }
+
+      ctx.clearRect(0, 0, W, H);
+      drawBackground(ctx, s.t);
+
+      if (s.gameState === "title") {
+        drawTitle(ctx, s.t);
+        raf = requestAnimationFrame(loop);
+        return;
+      }
+
+      for (const plat of s.platforms) drawPlatform(ctx, plat);
+      for (const spike of s.spikes) drawSpike(ctx, spike);
+      for (const spring of s.springs) drawSpring(ctx, spring);
+      for (const ring of s.rings) drawRing(ctx, ring, s.t);
+      drawCollectEffects(ctx, s.effects);
+      drawPlayer(ctx, s.p1, s.t);
+      drawPlayer(ctx, s.p2, s.t);
+      drawHUD(ctx, s.p1, s.p2, s.gameState, s.winner);
+
       raf = requestAnimationFrame(loop);
     };
 
@@ -653,12 +988,12 @@ export default function Game() {
   }, []);
 
   return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "100vw", height: "100vh", background: "#1a0a2e" }}>
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "100vw", height: "100vh", background: "#060c1a" }}>
       <canvas
         ref={canvasRef}
         width={W}
         height={H}
-        style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", borderRadius: 8, boxShadow: "0 0 60px rgba(0,100,255,0.5)" }}
+        style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", borderRadius: 10, boxShadow: "0 0 80px rgba(0,80,255,0.4)" }}
       />
     </div>
   );
