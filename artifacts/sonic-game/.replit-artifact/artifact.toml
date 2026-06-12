@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Sonic Two-Player Game"
+version = "1.0.0"
+id = "artifacts/sonic-game"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 25857
+
+[services.development]
+run = "pnpm --filter @workspace/sonic-game run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/sonic-game", "run", "build" ]
+publicDir = "artifacts/sonic-game/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "25857"
+BASE_PATH = "/"
