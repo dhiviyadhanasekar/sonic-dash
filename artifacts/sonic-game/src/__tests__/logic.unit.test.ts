@@ -42,45 +42,63 @@ describe("rectOverlap", () => {
 
 // ─── makePlayer ───────────────────────────────────────────────────────────────
 describe("makePlayer", () => {
-  it("creates Sonic with correct name and blue identity", () => {
-    const p = makePlayer(100, true);
+  it("creates Sonic with correct name and characterType", () => {
+    const p = makePlayer(100, "sonic");
     expect(p.name).toBe("SONIC");
-    expect(p.isSonic).toBe(true);
+    expect(p.characterType).toBe("sonic");
   });
 
-  it("creates Tails with correct name", () => {
-    const p = makePlayer(100, false);
+  it("creates Tails with correct name and characterType", () => {
+    const p = makePlayer(100, "tails");
     expect(p.name).toBe("TAILS");
-    expect(p.isSonic).toBe(false);
+    expect(p.characterType).toBe("tails");
+  });
+
+  it("creates Shadow with correct name", () => {
+    expect(makePlayer(100, "shadow").name).toBe("SHADOW");
+  });
+
+  it("creates Super Sonic with correct name", () => {
+    expect(makePlayer(100, "superSonic").name).toBe("SUPER SONIC");
+  });
+
+  it("creates Knuckles with correct name", () => {
+    expect(makePlayer(100, "knuckles").name).toBe("KNUCKLES");
   });
 
   it("positions player at given x", () => {
-    expect(makePlayer(200, true).x).toBe(200);
-    expect(makePlayer(800, false).x).toBe(800);
+    expect(makePlayer(200, "sonic").x).toBe(200);
+    expect(makePlayer(800, "tails").x).toBe(800);
   });
 
   it("starts with zero velocity", () => {
-    const p = makePlayer(0, true);
+    const p = makePlayer(0, "sonic");
     expect(p.vx).toBe(0);
     expect(p.vy).toBe(0);
   });
 
   it("starts with zero rings", () => {
-    expect(makePlayer(0, true).rings).toBe(0);
-    expect(makePlayer(0, false).rings).toBe(0);
+    expect(makePlayer(0, "sonic").rings).toBe(0);
+    expect(makePlayer(0, "tails").rings).toBe(0);
   });
 
   it("starts not on ground", () => {
-    expect(makePlayer(0, true).onGround).toBe(false);
+    expect(makePlayer(0, "sonic").onGround).toBe(false);
   });
 
   it("starts not invincible", () => {
-    expect(makePlayer(0, true).invincible).toBe(0);
+    expect(makePlayer(0, "sonic").invincible).toBe(0);
   });
 
-  it("Sonic faces right, Tails faces left initially", () => {
-    expect(makePlayer(0, true).facing).toBe(1);
-    expect(makePlayer(0, false).facing).toBe(-1);
+  it("respects the facing parameter (default 1 = right)", () => {
+    expect(makePlayer(0, "sonic").facing).toBe(1);
+    expect(makePlayer(0, "sonic", 1).facing).toBe(1);
+    expect(makePlayer(0, "tails", -1).facing).toBe(-1);
+  });
+
+  it("does not have an isSonic field", () => {
+    const p = makePlayer(0, "sonic") as Record<string, unknown>;
+    expect(p["isSonic"]).toBeUndefined();
   });
 });
 
@@ -195,23 +213,29 @@ describe("createGameState", () => {
   it("has 20 rings", () => {
     expect(createGameState().rings).toHaveLength(20);
   });
+
+  it("defaults p1 to Sonic and p2 to Tails", () => {
+    const s = createGameState();
+    expect(s.p1.characterType).toBe("sonic");
+    expect(s.p2.characterType).toBe("tails");
+  });
 });
 
 // ─── applyGravity ─────────────────────────────────────────────────────────────
 describe("applyGravity", () => {
   it("increases vy by GRAVITY each tick", () => {
-    const p = makePlayer(0, true);
+    const p = makePlayer(0, "sonic");
     const result = applyGravity(p);
     expect(result.vy).toBeCloseTo(p.vy + GRAVITY);
   });
 
   it("caps vy at 20", () => {
-    const p = { ...makePlayer(0, true), vy: 19.8 };
+    const p = { ...makePlayer(0, "sonic"), vy: 19.8 };
     expect(applyGravity(p).vy).toBe(20);
   });
 
   it("does not modify other fields", () => {
-    const p = makePlayer(100, true);
+    const p = makePlayer(100, "sonic");
     const result = applyGravity(p);
     expect(result.x).toBe(p.x);
     expect(result.rings).toBe(p.rings);
@@ -221,7 +245,7 @@ describe("applyGravity", () => {
 // ─── applyMovement ────────────────────────────────────────────────────────────
 describe("applyMovement", () => {
   it("moves left when left key pressed", () => {
-    const p = makePlayer(0, true);
+    const p = makePlayer(0, "sonic");
     const result = applyMovement(p, { left: true, right: false, jump: false });
     expect(result.vx).toBe(-SPEED);
     expect(result.facing).toBe(-1);
@@ -229,7 +253,7 @@ describe("applyMovement", () => {
   });
 
   it("moves right when right key pressed", () => {
-    const p = makePlayer(0, true);
+    const p = makePlayer(0, "sonic");
     const result = applyMovement(p, { left: false, right: true, jump: false });
     expect(result.vx).toBe(SPEED);
     expect(result.facing).toBe(1);
@@ -237,13 +261,13 @@ describe("applyMovement", () => {
   });
 
   it("decelerates when no key pressed", () => {
-    const p = { ...makePlayer(0, true), vx: 10 };
+    const p = { ...makePlayer(0, "sonic"), vx: 10 };
     const result = applyMovement(p, { left: false, right: false, jump: false });
     expect(result.vx).toBeLessThan(10);
   });
 
   it("applies jump force when jump pressed and on ground", () => {
-    const p = { ...makePlayer(0, true), onGround: true };
+    const p = { ...makePlayer(0, "sonic"), onGround: true };
     const result = applyMovement(p, { left: false, right: false, jump: true });
     expect(result.vy).toBe(JUMP_FORCE);
     expect(result.onGround).toBe(false);
@@ -251,19 +275,19 @@ describe("applyMovement", () => {
   });
 
   it("does not jump when not on ground", () => {
-    const p = { ...makePlayer(0, true), onGround: false, vy: 0 };
+    const p = { ...makePlayer(0, "sonic"), onGround: false, vy: 0 };
     const result = applyMovement(p, { left: false, right: false, jump: true });
     expect(result.vy).toBe(0);
   });
 
   it("decrements spinTimer each tick", () => {
-    const p = { ...makePlayer(0, true), spinTimer: 10, spinning: true };
+    const p = { ...makePlayer(0, "sonic"), spinTimer: 10, spinning: true };
     const result = applyMovement(p, { left: false, right: false, jump: false });
     expect(result.spinTimer).toBe(9);
   });
 
   it("clears spinning when spinTimer reaches zero", () => {
-    const p = { ...makePlayer(0, true), spinTimer: 1, spinning: true };
+    const p = { ...makePlayer(0, "sonic"), spinTimer: 1, spinning: true };
     const result = applyMovement(p, { left: false, right: false, jump: false });
     expect(result.spinning).toBe(false);
   });
@@ -272,17 +296,17 @@ describe("applyMovement", () => {
 // ─── clampPlayerToCanvas ─────────────────────────────────────────────────────
 describe("clampPlayerToCanvas", () => {
   it("clamps player to left edge", () => {
-    const p = { ...makePlayer(-50, true) };
+    const p = { ...makePlayer(-50, "sonic") };
     expect(clampPlayerToCanvas(p).x).toBe(0);
   });
 
   it("clamps player to right edge", () => {
-    const p = { ...makePlayer(W + 100, true) };
+    const p = { ...makePlayer(W + 100, "sonic") };
     expect(clampPlayerToCanvas(p).x).toBe(W - PW);
   });
 
   it("does not change player within bounds", () => {
-    const p = makePlayer(400, true);
+    const p = makePlayer(400, "sonic");
     expect(clampPlayerToCanvas(p).x).toBe(400);
   });
 });
@@ -291,7 +315,7 @@ describe("clampPlayerToCanvas", () => {
 describe("integratePlatformCollisions", () => {
   it("lands player on top of a platform when falling onto it", () => {
     const platform = { x: 0, y: 400, w: W, h: 40, color: "#2ecc71" };
-    const p = { ...makePlayer(100, true), y: 400 - PH - 1, vy: 5 };
+    const p = { ...makePlayer(100, "sonic"), y: 400 - PH - 1, vy: 5 };
     const result = integratePlatformCollisions(p, [platform]);
     expect(result.y).toBe(platform.y - PH);
     expect(result.vy).toBe(0);
@@ -299,14 +323,14 @@ describe("integratePlatformCollisions", () => {
   });
 
   it("respawns player at top when falling off bottom of screen", () => {
-    const p = { ...makePlayer(100, true), y: H + 200, vy: 5 };
+    const p = { ...makePlayer(100, "sonic"), y: H + 200, vy: 5 };
     const result = integratePlatformCollisions(p, []);
     expect(result.y).toBe(80);
     expect(result.vy).toBe(0);
   });
 
   it("does not set onGround when not on any platform", () => {
-    const p = { ...makePlayer(100, true), y: 100, vy: 2 };
+    const p = { ...makePlayer(100, "sonic"), y: 100, vy: 2 };
     const result = integratePlatformCollisions(p, []);
     expect(result.onGround).toBe(false);
   });
@@ -317,7 +341,7 @@ describe("applySpikeHit", () => {
   const spike = { x: 100, y: 600, w: 30, h: 20 };
 
   it("deducts 3 rings and grants invincibility on spike hit", () => {
-    const p = { ...makePlayer(102, true), y: 606, rings: 10, invincible: 0 };
+    const p = { ...makePlayer(102, "sonic"), y: 606, rings: 10, invincible: 0 };
     const { player, hit } = applySpikeHit(p, [spike]);
     expect(hit).toBe(true);
     expect(player.rings).toBe(7);
@@ -325,26 +349,26 @@ describe("applySpikeHit", () => {
   });
 
   it("does not reduce rings below zero", () => {
-    const p = { ...makePlayer(102, true), y: 606, rings: 1, invincible: 0 };
+    const p = { ...makePlayer(102, "sonic"), y: 606, rings: 1, invincible: 0 };
     const { player } = applySpikeHit(p, [spike]);
     expect(player.rings).toBeGreaterThanOrEqual(0);
   });
 
   it("bounces player upward on spike hit", () => {
-    const p = { ...makePlayer(102, true), y: 606, rings: 5, invincible: 0 };
+    const p = { ...makePlayer(102, "sonic"), y: 606, rings: 5, invincible: 0 };
     const { player } = applySpikeHit(p, [spike]);
     expect(player.vy).toBe(-9);
   });
 
   it("skips hit when player is invincible", () => {
-    const p = { ...makePlayer(102, true), y: 606, rings: 10, invincible: 30 };
+    const p = { ...makePlayer(102, "sonic"), y: 606, rings: 10, invincible: 30 };
     const { player, hit } = applySpikeHit(p, [spike]);
     expect(hit).toBe(false);
     expect(player.rings).toBe(10);
   });
 
   it("returns hit=false when player not overlapping spike", () => {
-    const p = makePlayer(500, true);
+    const p = makePlayer(500, "sonic");
     const { hit } = applySpikeHit(p, [spike]);
     expect(hit).toBe(false);
   });
@@ -354,7 +378,7 @@ describe("applySpikeHit", () => {
 describe("collectRings", () => {
   it("collects a ring when player overlaps it", () => {
     const ring = { x: 120, y: 200, collected: false, animFrame: 0 };
-    const p = { ...makePlayer(112, true), y: 192, rings: 0 };
+    const p = { ...makePlayer(112, "sonic"), y: 192, rings: 0 };
     const { player, rings } = collectRings(p, [ring]);
     expect(player.rings).toBe(1);
     expect(rings[0].collected).toBe(true);
@@ -362,21 +386,21 @@ describe("collectRings", () => {
 
   it("does not collect an already-collected ring", () => {
     const ring = { x: 120, y: 200, collected: true, animFrame: 0 };
-    const p = { ...makePlayer(112, true), y: 192, rings: 5 };
+    const p = { ...makePlayer(112, "sonic"), y: 192, rings: 5 };
     const { player } = collectRings(p, [ring]);
     expect(player.rings).toBe(5);
   });
 
   it("does not collect a ring out of range", () => {
     const ring = { x: 900, y: 200, collected: false, animFrame: 0 };
-    const p = makePlayer(100, true);
+    const p = makePlayer(100, "sonic");
     const { player } = collectRings(p, [ring]);
     expect(player.rings).toBe(0);
   });
 
   it("creates an effect when a ring is collected", () => {
     const ring = { x: 120, y: 200, collected: false, animFrame: 0 };
-    const p = { ...makePlayer(112, true), y: 192 };
+    const p = { ...makePlayer(112, "sonic"), y: 192 };
     const { effects } = collectRings(p, [ring]);
     expect(effects).toHaveLength(1);
     expect(effects[0].life).toBe(30);
@@ -387,7 +411,7 @@ describe("collectRings", () => {
       { x: 120, y: 200, collected: false, animFrame: 0 },
       { x: 130, y: 200, collected: false, animFrame: 1 },
     ];
-    const p = { ...makePlayer(112, true), y: 192 };
+    const p = { ...makePlayer(112, "sonic"), y: 192 };
     const { player } = collectRings(p, rings);
     expect(player.rings).toBe(2);
   });
@@ -398,7 +422,7 @@ describe("applySpringLaunch", () => {
   const spring = { x: 100, y: 640, active: false, timer: 0 };
 
   it("launches player upward when overlapping spring", () => {
-    const p = { ...makePlayer(102, true), y: 646 };
+    const p = { ...makePlayer(102, "sonic"), y: 646 };
     const { player, springs } = applySpringLaunch(p, [spring]);
     expect(player.vy).toBe(-24);
     expect(player.onGround).toBe(false);
@@ -408,7 +432,7 @@ describe("applySpringLaunch", () => {
   });
 
   it("does not affect player when not near spring", () => {
-    const p = makePlayer(500, true);
+    const p = makePlayer(500, "sonic");
     const { player } = applySpringLaunch(p, [spring]);
     expect(player.vy).toBe(0);
   });
@@ -417,12 +441,12 @@ describe("applySpringLaunch", () => {
 // ─── tickInvincibility ────────────────────────────────────────────────────────
 describe("tickInvincibility", () => {
   it("decrements invincible when > 0", () => {
-    const p = { ...makePlayer(0, true), invincible: 30 };
+    const p = { ...makePlayer(0, "sonic"), invincible: 30 };
     expect(tickInvincibility(p).invincible).toBe(29);
   });
 
   it("does not go below 0", () => {
-    const p = { ...makePlayer(0, true), invincible: 0 };
+    const p = { ...makePlayer(0, "sonic"), invincible: 0 };
     expect(tickInvincibility(p).invincible).toBe(0);
   });
 });
@@ -473,30 +497,36 @@ describe("tickEffects", () => {
 // ─── checkWin ─────────────────────────────────────────────────────────────────
 describe("checkWin", () => {
   it("returns over=false when neither player has enough rings", () => {
-    const p1 = makePlayer(0, true);
-    const p2 = makePlayer(0, false);
+    const p1 = makePlayer(0, "sonic");
+    const p2 = makePlayer(0, "tails");
     expect(checkWin(p1, p2).over).toBe(false);
   });
 
   it("returns Sonic as winner when p1 reaches WIN_RINGS", () => {
-    const p1 = { ...makePlayer(0, true), rings: WIN_RINGS };
-    const p2 = makePlayer(0, false);
+    const p1 = { ...makePlayer(0, "sonic"), rings: WIN_RINGS };
+    const p2 = makePlayer(0, "tails");
     const result = checkWin(p1, p2);
     expect(result.over).toBe(true);
     expect(result.winner).toBe("SONIC");
   });
 
   it("returns Tails as winner when p2 reaches WIN_RINGS", () => {
-    const p1 = makePlayer(0, true);
-    const p2 = { ...makePlayer(0, false), rings: WIN_RINGS };
+    const p1 = makePlayer(0, "sonic");
+    const p2 = { ...makePlayer(0, "tails"), rings: WIN_RINGS };
     const result = checkWin(p1, p2);
     expect(result.over).toBe(true);
     expect(result.winner).toBe("TAILS");
   });
 
+  it("uses character name for winner when any character wins", () => {
+    const p1 = { ...makePlayer(0, "knuckles"), rings: WIN_RINGS };
+    const p2 = makePlayer(0, "shadow");
+    expect(checkWin(p1, p2).winner).toBe("KNUCKLES");
+  });
+
   it("triggers at exactly WIN_RINGS (not one below)", () => {
-    const p1 = { ...makePlayer(0, true), rings: WIN_RINGS - 1 };
-    const p2 = makePlayer(0, false);
+    const p1 = { ...makePlayer(0, "sonic"), rings: WIN_RINGS - 1 };
+    const p2 = makePlayer(0, "tails");
     expect(checkWin(p1, p2).over).toBe(false);
   });
 });

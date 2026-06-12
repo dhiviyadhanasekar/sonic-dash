@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
-  createGameState, tickGameState, startGame,
-  makePlayer, makeRings, makePlatforms,
+  createGameState, tickGameState, startGame, startGameWithCharacters,
+  makePlayer, makeRings,
   WIN_RINGS, H, W, PH,
   type TickKeys,
 } from "../game/logic";
@@ -28,8 +28,18 @@ describe("game state machine", () => {
     expect(s.gameState).toBe("title");
   });
 
+  it("ticking in selecting state does not change to playing", () => {
+    const s = runTicks({ ...createGameState(), gameState: "selecting" }, noKeys, 30);
+    expect(s.gameState).toBe("selecting");
+  });
+
   it("startGame transitions to playing", () => {
     const s = startGame(createGameState());
+    expect(s.gameState).toBe("playing");
+  });
+
+  it("startGameWithCharacters transitions to playing", () => {
+    const s = startGameWithCharacters(createGameState(), "sonic", "shadow");
     expect(s.gameState).toBe("playing");
   });
 
@@ -41,6 +51,13 @@ describe("game state machine", () => {
     expect(restarted.p2.rings).toBe(0);
   });
 
+  it("startGame preserves character selections", () => {
+    let s = startGameWithCharacters(createGameState(), "knuckles", "shadow");
+    s = startGame(s);
+    expect(s.p1.characterType).toBe("knuckles");
+    expect(s.p2.characterType).toBe("shadow");
+  });
+
   it("startGame resets all rings to uncollected", () => {
     let s = startGame(createGameState());
     s = { ...s, rings: s.rings.map(r => ({ ...r, collected: true })) };
@@ -48,7 +65,7 @@ describe("game state machine", () => {
     expect(restarted.rings.every(r => !r.collected)).toBe(true);
   });
 
-  it("game over when p1 collects WIN_RINGS rings", () => {
+  it("game over when p1 collects WIN_RINGS rings (default Sonic)", () => {
     let s = startGame(createGameState());
     s = { ...s, p1: { ...s.p1, rings: WIN_RINGS } };
     s = tickGameState(s, noKeys);
@@ -56,12 +73,19 @@ describe("game state machine", () => {
     expect(s.winner).toBe("SONIC");
   });
 
-  it("game over when p2 collects WIN_RINGS rings", () => {
+  it("game over when p2 collects WIN_RINGS rings (default Tails)", () => {
     let s = startGame(createGameState());
     s = { ...s, p2: { ...s.p2, rings: WIN_RINGS } };
     s = tickGameState(s, noKeys);
     expect(s.gameState).toBe("over");
     expect(s.winner).toBe("TAILS");
+  });
+
+  it("winner name matches chosen character", () => {
+    let s = startGameWithCharacters(createGameState(), "knuckles", "shadow");
+    s = { ...s, p1: { ...s.p1, rings: WIN_RINGS } };
+    s = tickGameState(s, noKeys);
+    expect(s.winner).toBe("KNUCKLES");
   });
 
   it("game does not tick players when in over state", () => {
@@ -76,6 +100,11 @@ describe("game state machine", () => {
 describe("time counter", () => {
   it("increments t each tick in title state", () => {
     const s = runTicks(createGameState(), noKeys, 5);
+    expect(s.t).toBe(5);
+  });
+
+  it("increments t each tick in selecting state", () => {
+    const s = runTicks({ ...createGameState(), gameState: "selecting" }, noKeys, 5);
     expect(s.t).toBe(5);
   });
 
@@ -149,10 +178,8 @@ describe("gravity and landing", () => {
 
   it("player lands on ground platform and stops falling", () => {
     let s = startGame(createGameState());
-    // Put player high up, let gravity bring them down
     s = { ...s, p1: { ...s.p1, y: 100, vy: 0, onGround: false } };
     const result = runTicks(s, noKeys, 80);
-    // Should be resting on ground (H - 40) or a platform
     expect(result.p1.onGround).toBe(true);
   });
 });
@@ -162,8 +189,6 @@ describe("ring collection integration", () => {
   it("collecting a ring increments player ring count", () => {
     let s = startGame(createGameState());
     const ring = s.rings[0];
-    // Place p1 so hitbox (p.x+8 … p.x+40) overlaps only ring[0] (at ring.x ± 12)
-    // Using p.x = ring.x - 40 → hitbox 208–240, ring[0] at 228–252, ring[1] at 258–282 ✓
     s = { ...s, p1: { ...s.p1, x: ring.x - 40, y: ring.y - 8, onGround: true, vy: 0 } };
     const result = tickGameState(s, noKeys);
     expect(result.p1.rings).toBe(1);
@@ -194,7 +219,6 @@ describe("ring collection integration", () => {
     s = { ...s, p1: { ...s.p1, x: ring.x - 40, y: ring.y - 8, onGround: true, vy: 0 } };
     const result = tickGameState(s, noKeys);
     expect(result.effects.length).toBeGreaterThan(0);
-    // tickEffects runs in the same frame as collection, decrementing life by 1 (30 → 29)
     expect(result.effects[0].life).toBe(29);
   });
 });
@@ -242,7 +266,6 @@ describe("win condition end-to-end", () => {
   it("game correctly identifies winner when p1 wins", () => {
     let s = startGame(createGameState());
     s = { ...s, p1: { ...s.p1, rings: WIN_RINGS - 1 } };
-    // Give p1 one more ring
     const ring = { ...s.rings[0], collected: false };
     s = {
       ...s,
@@ -266,5 +289,18 @@ describe("win condition end-to-end", () => {
     const result = tickGameState(s, noKeys);
     expect(result.gameState).toBe("over");
     expect(result.winner).toBe("TAILS");
+  });
+
+  it("winner name reflects chosen character", () => {
+    let s = startGameWithCharacters(createGameState(), "superSonic", "knuckles");
+    s = { ...s, p2: { ...s.p2, rings: WIN_RINGS - 1 } };
+    const ring = { ...s.rings[0], collected: false };
+    s = {
+      ...s,
+      rings: [ring, ...s.rings.slice(1)],
+      p2: { ...s.p2, x: ring.x - 8, y: ring.y - 8, onGround: true, vy: 0 },
+    };
+    const result = tickGameState(s, noKeys);
+    expect(result.winner).toBe("KNUCKLES");
   });
 });

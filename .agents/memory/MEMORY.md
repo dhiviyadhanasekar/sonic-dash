@@ -1,0 +1,2 @@
+- [Sonic game architecture](sonic-game-arch.md) — CharacterType union replaces isSonic bool; CharacterSelect is HTML overlay over canvas, not a canvas draw.
+- [Sonic game CSP caveat](sonic-game-csp.md) — frame-ancestors must NOT be in <meta> CSP; only valid in HTTP headers.

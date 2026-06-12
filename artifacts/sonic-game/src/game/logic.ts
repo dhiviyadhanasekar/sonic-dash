@@ -8,6 +8,27 @@ export const WIN_RINGS = 15;
 export const PW = 48;
 export const PH = 56;
 
+// ─── Character types ──────────────────────────────────────────────────────────
+export type CharacterType = "sonic" | "shadow" | "tails" | "superSonic" | "knuckles";
+
+export interface CharacterDef {
+  id: CharacterType;
+  name: string;
+  description: string;
+}
+
+export const CHARACTERS: CharacterDef[] = [
+  { id: "sonic",      name: "SONIC",       description: "Fastest thing alive" },
+  { id: "shadow",     name: "SHADOW",      description: "Ultimate life form" },
+  { id: "tails",      name: "TAILS",       description: "Genius fox inventor" },
+  { id: "superSonic", name: "SUPER SONIC", description: "Invincible power" },
+  { id: "knuckles",   name: "KNUCKLES",    description: "Master of power" },
+];
+
+export function getCharacterName(type: CharacterType): string {
+  return CHARACTERS.find(c => c.id === type)!.name;
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 export interface Platform { x: number; y: number; w: number; h: number; color: string }
 export interface Ring { x: number; y: number; collected: boolean; animFrame: number }
@@ -27,13 +48,13 @@ export interface Player {
   invincible: number;
   spinning: boolean;
   spinTimer: number;
-  isSonic: boolean;
+  characterType: CharacterType;
   name: string;
 }
 
 export interface GameState {
   t: number;
-  gameState: "title" | "playing" | "over";
+  gameState: "title" | "selecting" | "playing" | "over";
   winner: string;
   p1: Player;
   p2: Player;
@@ -55,20 +76,25 @@ export interface TickKeys {
   p2: PlayerKeys;
 }
 
+// ─── Character helpers ────────────────────────────────────────────────────────
+export function needsDifferentiation(p1: Player, p2: Player): boolean {
+  return p1.characterType === p2.characterType;
+}
+
 // ─── Factories ────────────────────────────────────────────────────────────────
-export function makePlayer(x: number, isSonic: boolean): Player {
+export function makePlayer(x: number, characterType: CharacterType, facing = 1): Player {
   return {
     x, y: H - 200,
     vx: 0, vy: 0,
     onGround: false,
     rings: 0,
-    facing: isSonic ? 1 : -1,
+    facing,
     animFrame: 0, animTimer: 0,
     running: false,
     invincible: 0,
     spinning: false, spinTimer: 0,
-    isSonic,
-    name: isSonic ? "SONIC" : "TAILS",
+    characterType,
+    name: getCharacterName(characterType),
   };
 }
 
@@ -125,8 +151,8 @@ export function createGameState(): GameState {
     t: 0,
     gameState: "title",
     winner: "",
-    p1: makePlayer(120, true),
-    p2: makePlayer(W - 170, false),
+    p1: makePlayer(120, "sonic", 1),
+    p2: makePlayer(W - 170, "tails", -1),
     platforms: makePlatforms(),
     rings: makeRings(),
     spikes: makeSpikes(),
@@ -201,7 +227,6 @@ export function integratePlatformCollisions(p: Player, platforms: Platform[]): P
     }
   }
 
-  // Wrap: fall off bottom respawns at top
   if (y > H + 100) { y = 80; vy = 0; }
 
   return { ...p, x, y, vx, vy, onGround, spinning };
@@ -293,7 +318,6 @@ export function tickGameState(state: GameState, keys: TickKeys): GameState {
 
   let { p1, p2, rings, springs, effects } = state;
 
-  // Player 1
   p1 = applyMovement(p1, keys.p1);
   p1 = applyGravity(p1);
   p1 = integratePlatformCollisions(p1, state.platforms);
@@ -306,7 +330,6 @@ export function tickGameState(state: GameState, keys: TickKeys): GameState {
   p1 = tickInvincibility(p1);
   p1 = tickAnimation(p1);
 
-  // Player 2
   p2 = applyMovement(p2, keys.p2);
   p2 = applyGravity(p2);
   p2 = integratePlatformCollisions(p2, state.platforms);
@@ -337,5 +360,20 @@ export function startGame(state: GameState): GameState {
   return {
     ...createGameState(),
     gameState: "playing",
+    p1: makePlayer(120, state.p1.characterType, 1),
+    p2: makePlayer(W - 170, state.p2.characterType, -1),
+  };
+}
+
+export function startGameWithCharacters(
+  _state: GameState,
+  p1Char: CharacterType,
+  p2Char: CharacterType,
+): GameState {
+  return {
+    ...createGameState(),
+    gameState: "playing",
+    p1: makePlayer(120, p1Char, 1),
+    p2: makePlayer(W - 170, p2Char, -1),
   };
 }
