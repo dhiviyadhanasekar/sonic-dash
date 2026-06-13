@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "X4RcX0fo4MXx-mcI74mXP"
+uri = "file://artifacts/sonic-game/README.md"
+type = "text"
+title = "Sonic Dash — README & User Guide"
