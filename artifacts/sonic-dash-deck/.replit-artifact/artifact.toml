@@ -1,0 +1,31 @@
+kind = "slides"
+previewPath = "/sonic-dash-deck/"
+title = "Sonic Dash — Project Deck"
+version = "1.0.0"
+id = "artifacts/sonic-dash-deck"
+router = "path"
+
+[[integratedSkills]]
+name = "slides"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/sonic-dash-deck/" ]
+localPort = 23215
+
+[services.development]
+run = "pnpm --filter @workspace/sonic-dash-deck run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/sonic-dash-deck", "run", "build" ]
+publicDir = "artifacts/sonic-dash-deck/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "23215"
+BASE_PATH = "/sonic-dash-deck/"

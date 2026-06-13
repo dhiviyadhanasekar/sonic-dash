@@ -1,0 +1,74 @@
+[
+  {
+    "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567801",
+    "position": 1,
+    "filepath": "src/pages/slides/Slide01Title.tsx",
+    "title": "Sonic Dash",
+    "description": "Title slide",
+    "speakerNotes": ""
+  },
+  {
+    "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567802",
+    "position": 2,
+    "filepath": "src/pages/slides/Slide02TheIdea.tsx",
+    "title": "The Idea",
+    "description": "Game concept overview",
+    "speakerNotes": ""
+  },
+  {
+    "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567803",
+    "position": 3,
+    "filepath": "src/pages/slides/Slide03HowToPlay.tsx",
+    "title": "How to Play",
+    "description": "Controls for both players",
+    "speakerNotes": ""
+  },
+  {
+    "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567804",
+    "position": 4,
+    "filepath": "src/pages/slides/Slide04Characters.tsx",
+    "title": "Pick Your Character",
+    "description": "All 5 playable characters",
+    "speakerNotes": ""
+  },
+  {
+    "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567805",
+    "position": 5,
+    "filepath": "src/pages/slides/Slide05Features.tsx",
+    "title": "Game Features",
+    "description": "Rings, spikes, and springs",
+    "speakerNotes": ""
+  },
+  {
+    "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567806",
+    "position": 6,
+    "filepath": "src/pages/slides/Slide06TechStack.tsx",
+    "title": "Tech Stack",
+    "description": "Technologies used to build the game",
+    "speakerNotes": ""
+  },
+  {
+    "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567807",
+    "position": 7,
+    "filepath": "src/pages/slides/Slide07Testing.tsx",
+    "title": "Built with TDD",
+    "description": "165 tests across unit, integration, and E2E",
+    "speakerNotes": ""
+  },
+  {
+    "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567808",
+    "position": 8,
+    "filepath": "src/pages/slides/Slide08Quality.tsx",
+    "title": "Accessibility & Security",
+    "description": "ARIA roles, CSP, and OWASP fixes",
+    "speakerNotes": ""
+  },
+  {
+    "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567809",
+    "position": 9,
+    "filepath": "src/pages/slides/Slide09Closing.tsx",
+    "title": "Play it Now",
+    "description": "Closing slide",
+    "speakerNotes": ""
+  }
+]
